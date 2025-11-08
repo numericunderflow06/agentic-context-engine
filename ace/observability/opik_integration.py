@@ -12,6 +12,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 from dataclasses import asdict
 
+OpikLogger: Optional[type]
+
 try:
     import opik
     from opik import track, opik_context
@@ -23,15 +25,15 @@ try:
         from litellm.integrations.opik.opik import OpikLogger as OpikLoggerClass
 
         LITELLM_OPIK_AVAILABLE = True
-        OpikLogger: Optional[type] = OpikLoggerClass
+        OpikLogger = OpikLoggerClass
     except ImportError:
         LITELLM_OPIK_AVAILABLE = False
-        OpikLogger: Optional[type] = None
+        OpikLogger = None  # type: ignore[assignment]
 
 except ImportError:
     OPIK_AVAILABLE = False
     LITELLM_OPIK_AVAILABLE = False
-    OpikLogger: Optional[type] = None
+    OpikLogger = None  # type: ignore[assignment]
 
     # Create mock decorators for graceful degradation
     def track(*args, **kwargs):

@@ -3,17 +3,19 @@
 from typing import Optional, Dict, Any, AsyncIterator, Iterator
 import logging
 
+Router: Optional[type]
+
 try:
     from langchain_litellm import ChatLiteLLM, ChatLiteLLMRouter
     from litellm import Router as LiteLLMRouter
 
     LANGCHAIN_AVAILABLE = True
-    Router: Optional[type] = LiteLLMRouter
+    Router = LiteLLMRouter  # type: ignore[assignment]
 except ImportError:
     LANGCHAIN_AVAILABLE = False
     ChatLiteLLM = None  # type: ignore
     ChatLiteLLMRouter = None  # type: ignore
-    Router: Optional[type] = None
+    Router = None  # type: ignore[assignment]
 
 from ..llm import LLMClient, LLMResponse
 

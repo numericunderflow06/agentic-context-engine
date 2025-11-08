@@ -14,7 +14,7 @@ Based on ACE v2.0 architecture with MCP presentation enhancements.
 """
 
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 # ================================
 # GENERATOR PROMPT - VERSION 2.1
@@ -1541,7 +1541,7 @@ def compare_prompt_versions(role: str = "generator") -> Dict[str, Any]:
     """
     import difflib
 
-    comparisons = {}
+    comparisons: Dict[str, Any] = {}
 
     # Get prompts for comparison
     manager = PromptManager()

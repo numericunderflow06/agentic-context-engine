@@ -169,7 +169,7 @@ class LiteLLMClient(LLMClient):
             litellm.set_verbose = True
 
         # Set up router if fallbacks are configured
-        self.router = None
+        self.router: Optional[Any] = None  # Router type from litellm
         if self.config.fallbacks:
             self._setup_router()
 
