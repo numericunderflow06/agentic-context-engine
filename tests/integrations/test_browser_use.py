@@ -94,6 +94,24 @@ class TestACEAgentInitialization:
 
         assert agent.ace_llm is custom_llm
 
+    def test_with_ace_max_tokens(self):
+        """Should accept ace_max_tokens parameter."""
+        from browser_use import ChatBrowserUse
+
+        agent = ACEAgent(llm=ChatBrowserUse(), ace_max_tokens=4096)
+
+        assert agent.ace_llm is not None
+        assert agent.ace_llm.config.max_tokens == 4096
+
+    def test_default_ace_max_tokens(self):
+        """Should use default max_tokens of 2048."""
+        from browser_use import ChatBrowserUse
+
+        agent = ACEAgent(llm=ChatBrowserUse())
+
+        assert agent.ace_llm is not None
+        assert agent.ace_llm.config.max_tokens == 2048
+
     def test_learning_disabled(self):
         """Should respect is_learning=False."""
         from browser_use import ChatBrowserUse

@@ -138,7 +138,11 @@ await agent.run(task="New task")  # Starts smart!
 - ✅ Toggle learning on/off with `is_learning` flag
 - ✅ Works with all browser-use LLMs (ChatOpenAI, ChatBrowserUse, etc.)
 
-See [simple_ace_agent.py](examples/browser-use/simple_ace_agent.py) for a complete example.
+**Build your own integration:** See [Integration Guide](docs/INTEGRATION_GUIDE.md) to add ACE learning to any custom agentic system.
+
+**Examples:**
+- [simple_ace_agent.py](examples/browser-use/simple_ace_agent.py) - Complete browser-use example
+- [custom_integration_example.py](examples/custom_integration_example.py) - Minimal custom agent integration
 
 ---
 

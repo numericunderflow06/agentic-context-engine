@@ -89,6 +89,7 @@ class ACEAgent:
         browser: Optional[Any] = None,
         ace_model: str = "gpt-4o-mini",
         ace_llm: Optional[LiteLLMClient] = None,
+        ace_max_tokens: int = 2048,
         playbook: Optional[Playbook] = None,
         playbook_path: Optional[str] = None,
         is_learning: bool = True,
@@ -103,6 +104,10 @@ class ACEAgent:
             browser: Browser instance (optional, created automatically if None)
             ace_model: Model name for ACE learning (Reflector/Curator)
             ace_llm: Custom LLM client for ACE (overrides ace_model)
+            ace_max_tokens: Max tokens for ACE learning LLM (default: 2048).
+                Reflector typically needs 400-800 tokens for analysis.
+                Curator typically needs 300-1000 tokens for delta operations.
+                Increase for complex tasks with long execution histories.
             playbook: Existing Playbook instance
             playbook_path: Path to load playbook from
             is_learning: Enable/disable ACE learning
@@ -133,7 +138,9 @@ class ACEAgent:
             self.playbook = Playbook()
 
         # Create ACE LLM (for Reflector/Curator, NOT execution)
-        self.ace_llm = ace_llm or LiteLLMClient(model=ace_model)
+        self.ace_llm = ace_llm or LiteLLMClient(
+            model=ace_model, max_tokens=ace_max_tokens
+        )
 
         # Create ACE learning components (NO GENERATOR!)
         self.reflector = Reflector(self.ace_llm)
