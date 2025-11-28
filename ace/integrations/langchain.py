@@ -800,6 +800,21 @@ Note: This is an external LangChain chain execution that failed. Learning should
         """Disable learning (prevents learn() from updating playbook)."""
         self.is_learning = False
 
+    def get_strategies(self) -> str:
+        """
+        Get current playbook strategies as formatted text.
+
+        Returns:
+            Formatted string with learned strategies (empty if none)
+
+        Example:
+            strategies = ace_chain.get_strategies()
+            print(strategies)
+        """
+        if not self.playbook or not self.playbook.bullets():
+            return ""
+        return wrap_playbook_context(self.playbook)
+
     def __repr__(self) -> str:
         """String representation."""
         bullets_count = len(self.playbook.bullets()) if self.playbook else 0

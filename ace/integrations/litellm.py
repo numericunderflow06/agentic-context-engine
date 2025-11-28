@@ -39,10 +39,10 @@ Example:
     agent = ACELiteLLM(model="gpt-4o-mini", playbook_path="my_agent.json")
 """
 
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Optional, Dict, Any, Tuple
 
 from ..playbook import Playbook
-from ..roles import Generator, Reflector, Curator
+from ..roles import Generator, Reflector, Curator, GeneratorOutput
 from ..adaptation import OfflineAdapter, Sample, TaskEnvironment
 from ..prompts_v2_1 import PromptManager
 
@@ -63,9 +63,15 @@ class ACELiteLLM:
     - Prototyping and experimentation
     - Learning without external frameworks
 
+    Insight Level: Micro
+        Uses the full ACE loop with TaskEnvironment for ground truth evaluation.
+        The learn() method runs OfflineAdapter which evaluates correctness and
+        learns from whether answers are right or wrong.
+        See docs/COMPLETE_GUIDE_TO_ACE.md for details.
+
     For other use cases:
-    - ACEAgent (browser-use): Browser automation with learning
-    - ACELangChain: LangChain chains/agents with learning
+    - ACEAgent (browser-use): Browser automation with learning (meso-level)
+    - ACELangChain: LangChain chains/agents with learning (meso for AgentExecutor)
     - Integration pattern: Custom agent systems (see docs)
 
     Attributes:
@@ -179,11 +185,16 @@ class ACELiteLLM:
         # Store adapter reference for async learning control
         self._adapter: Optional[OfflineAdapter] = None
 
+        # Store last interaction for learn_from_feedback()
+        self._last_interaction: Optional[Tuple[str, GeneratorOutput]] = None
+
     def ask(self, question: str, context: str = "") -> str:
         """
         Ask a question and get an answer (uses current playbook).
 
         This uses the ACE Generator with the current playbook's learned strategies.
+        The full GeneratorOutput trace is stored internally for potential learning
+        via learn_from_feedback().
 
         Args:
             question: Question to answer
@@ -202,10 +213,15 @@ class ACELiteLLM:
                 "What is GDP?",
                 context="Economics question"
             )
+
+            # Learn from feedback
+            agent.learn_from_feedback(feedback="correct")
         """
         result = self.generator.generate(
             question=question, context=context, playbook=self.playbook
         )
+        # Store full trace for potential learning via learn_from_feedback()
+        self._last_interaction = (question, result)
         return result.final_answer
 
     def learn(
@@ -222,6 +238,11 @@ class ACELiteLLM:
         Learn from examples (offline learning).
 
         Uses OfflineAdapter to learn from a batch of samples.
+
+        Insight Level: Micro
+            This is micro-level learning with ground truth evaluation.
+            The TaskEnvironment evaluates each answer for correctness,
+            and the Reflector learns from whether answers are right or wrong.
 
         Args:
             samples: List of Sample objects to learn from
@@ -286,6 +307,80 @@ class ACELiteLLM:
         )
 
         return results
+
+    def learn_from_feedback(
+        self,
+        feedback: str,
+        ground_truth: Optional[str] = None,
+    ) -> bool:
+        """
+        Learn from the last ask() interaction.
+
+        Uses the stored GeneratorOutput trace from the previous ask() call.
+        This allows the Reflector to analyze the full reasoning and bullet
+        citations, not just the final answer.
+
+        Follows the `learn_from_X` naming pattern from other ACE integrations
+        (e.g., ACEAgent._learn_from_execution, ACELangChain._learn_from_failure).
+
+        Args:
+            feedback: User feedback describing the outcome. Can be:
+                     - Simple: "correct", "wrong", "partially correct"
+                     - Detailed: "Good answer but too verbose"
+            ground_truth: Optional correct answer if the response was wrong
+
+        Returns:
+            True if learning was applied
+            False if no prior interaction exists or learning is disabled
+
+        Example:
+            agent = ACELiteLLM()
+
+            # Ask and provide feedback
+            answer = agent.ask("What is 2+2?")
+            agent.learn_from_feedback(feedback="correct")
+
+            # With ground truth for incorrect answers
+            answer = agent.ask("Capital of Australia?")
+            agent.learn_from_feedback(
+                feedback="wrong",
+                ground_truth="Canberra"
+            )
+
+            # Detailed feedback
+            answer = agent.ask("Explain quantum physics")
+            agent.learn_from_feedback(
+                feedback="Too technical for a beginner audience"
+            )
+        """
+        if not self.is_learning:
+            return False
+
+        if self._last_interaction is None:
+            return False
+
+        question, generator_output = self._last_interaction
+
+        # Run Reflector with full trace context
+        reflection = self.reflector.reflect(
+            question=question,
+            generator_output=generator_output,  # Full trace: reasoning, bullet_ids
+            playbook=self.playbook,
+            ground_truth=ground_truth,
+            feedback=feedback,
+        )
+
+        # Run Curator to generate playbook updates
+        curator_output = self.curator.curate(
+            reflection=reflection,
+            playbook=self.playbook,
+            question_context=f"User interaction: {question}",
+            progress="Learning from user feedback",
+        )
+
+        # Apply updates to playbook
+        self.playbook.apply_delta(curator_output.delta)
+        return True
 
     def save_playbook(self, path: str):
         """
