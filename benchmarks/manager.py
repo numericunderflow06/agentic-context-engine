@@ -25,6 +25,7 @@ except ImportError:
 
 from .base import BenchmarkConfig, BenchmarkEnvironment, DataLoader
 from .loaders.huggingface import HuggingFaceLoader
+from .loaders.swebench import SWEBenchLoader
 
 
 class BenchmarkTaskManager:
@@ -62,6 +63,7 @@ class BenchmarkTaskManager:
         # Register available data loaders
         self._loaders: Dict[str, DataLoader] = {
             "huggingface": HuggingFaceLoader(),
+            "swebench": SWEBenchLoader(),
         }
 
         # Try to import and register AppWorld loader if available

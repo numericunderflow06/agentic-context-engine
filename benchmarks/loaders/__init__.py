@@ -2,8 +2,9 @@
 
 from ..base import DataLoader
 from .huggingface import HuggingFaceLoader
+from .swebench import SWEBenchLoader
 
-__all__ = ["DataLoader", "HuggingFaceLoader"]
+__all__ = ["DataLoader", "HuggingFaceLoader", "SWEBenchLoader"]
 
 # AppWorld loader is imported conditionally since appworld might not be installed
 try:
