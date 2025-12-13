@@ -333,9 +333,12 @@ D) {choices[3] if len(choices) > 3 else ''}
 
 Answer with just the letter (A, B, C, or D)."""
 
-                # Convert numeric answer to letter
+                # Convert numeric answer to letter (handle both int and string)
+                answer_idx = data.get("answer", 0)
+                if isinstance(answer_idx, str):
+                    answer_idx = int(answer_idx) if answer_idx.isdigit() else 0
                 answer_map = {0: "A", 1: "B", 2: "C", 3: "D"}
-                ground_truth = answer_map.get(data.get("answer", 0), "A")
+                ground_truth = answer_map.get(answer_idx, "A")
 
                 sample = Sample(question=question, ground_truth=ground_truth)
         elif args.benchmark == "swe_bench":
@@ -359,24 +362,34 @@ Include your reasoning before the patch."""
                 metadata=data.get("metadata", {}),
             )
         elif args.benchmark == "gsm8k":
-            # GSM8K math problems
-            question = f"""Solve this math problem step by step:
+            # GSM8K math problems - may come pre-processed from GSM8KProcessor
+            if "question" in data and "ground_truth" in data and data.get("ground_truth"):
+                # Already processed by GSM8KProcessor
+                sample = Sample(
+                    question=data["question"],
+                    ground_truth=data["ground_truth"],
+                    context=data.get("context", ""),
+                    metadata=data.get("metadata", {}),
+                )
+            else:
+                # Raw data - format it ourselves
+                question = f"""Solve this math problem step by step:
 
 {data.get('question', '')}
 
 Provide your final numerical answer after ####."""
 
-            # Extract final answer from GSM8K format (#### NUMBER)
-            import re
-            answer = data.get("answer", "")
-            match = re.search(r"####\s*(.+)", answer)
-            ground_truth = match.group(1).strip().replace(",", "") if match else answer
+                # Extract final answer from GSM8K format (#### NUMBER)
+                import re
+                answer = data.get("answer", "")
+                match = re.search(r"####\s*(.+)", answer)
+                ground_truth = match.group(1).strip().replace(",", "") if match else answer
 
-            sample = Sample(
-                question=question,
-                ground_truth=ground_truth,
-                context=answer,  # Full solution as context
-            )
+                sample = Sample(
+                    question=question,
+                    ground_truth=ground_truth,
+                    context=answer,  # Full solution as context
+                )
         elif args.benchmark == "letta_bench":
             # Letta benchmark handling
             history = data.get("conversation_history", "")

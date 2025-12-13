@@ -6,7 +6,7 @@ data:
   dataset_path: cais/mmlu
   subset: all
   split: test
-  limit: 500
+  # No default limit - use --limit CLI arg for testing, omit for full evaluation
 
 preprocessing:
   question_template: |

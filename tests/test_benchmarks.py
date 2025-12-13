@@ -183,7 +183,8 @@ class TestFiNEREnvironment(unittest.TestCase):
         sample = Sample(question="Test", ground_truth="")
         entities = self.env._extract_entities(prediction, sample)
 
-        expected = {("Apple Inc.", "ORG"), ("Tim Cook", "PERSON")}
+        # Entity types are normalized (PERSON->PER, ORG stays ORG)
+        expected = {("Apple Inc.", "ORG"), ("Tim Cook", "PER")}
         self.assertEqual(entities, expected)
 
     def test_extract_entities_text(self):
@@ -195,9 +196,10 @@ class TestFiNEREnvironment(unittest.TestCase):
         sample = Sample(question="Test", ground_truth="")
         entities = self.env._extract_entities(prediction, sample)
 
-        self.assertIn(("John Smith", "PERSON"), entities)
-        self.assertIn(("Microsoft Corp", "ORGANIZATION"), entities)
-        self.assertIn(("New York", "LOCATION"), entities)
+        # Entity types are normalized (PERSON->PER, ORGANIZATION->ORG, LOCATION->LOC)
+        self.assertIn(("John Smith", "PER"), entities)
+        self.assertIn(("Microsoft Corp", "ORG"), entities)
+        self.assertIn(("New York", "LOC"), entities)
 
     def test_ner_metrics_calculation(self):
         """Test NER metrics calculation."""

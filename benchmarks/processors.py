@@ -355,7 +355,9 @@ class MultipleChoiceProcessor:
         # Format question with choices
         formatted_question = self._format_multiple_choice(question, choices)
 
-        # Convert numeric answer to letter
+        # Convert answer to integer if it's a string, then to letter
+        if isinstance(answer_idx, str):
+            answer_idx = int(answer_idx) if answer_idx.isdigit() else 0
         ground_truth = self.letter_map.get(answer_idx, str(answer_idx))
 
         return Sample(

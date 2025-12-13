@@ -94,10 +94,13 @@ class FiNEREnvironment(BenchmarkEnvironment):
                             and "text" in entity
                             and "label" in entity
                         ):
-                            entities.add((entity["text"], entity["label"]))
+                            # Normalize entity type for consistency
+                            normalized_type = self._normalize_entity_type(entity["label"])
+                            entities.add((entity["text"], normalized_type))
                 elif isinstance(parsed, dict) and "entities" in parsed:
                     for entity in parsed["entities"]:
-                        entities.add((entity["text"], entity["label"]))
+                        normalized_type = self._normalize_entity_type(entity["label"])
+                        entities.add((entity["text"], normalized_type))
         except (json.JSONDecodeError, KeyError):
             pass
 
@@ -111,35 +114,127 @@ class FiNEREnvironment(BenchmarkEnvironment):
         """Extract entities from unstructured text using patterns."""
         entities = set()
 
-        # Common patterns for entity mentions
-        patterns = [
-            r"(?:PERSON|PER):\s*([^,\n]+)",
-            r"(?:ORGANIZATION|ORG):\s*([^,\n]+)",
-            r"(?:LOCATION|LOC):\s*([^,\n]+)",
-            r"(?:FINANCIAL|FIN):\s*([^,\n]+)",
+        # Check for "no entities" responses
+        no_entity_patterns = [
+            r"no\s+named\s+entit",
+            r"no\s+entit",
+            r"cannot\s+be\s+identified",
+            r"none\s+found",
+            r"no\s+specific",
         ]
+        for pattern in no_entity_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                return entities  # Return empty set
 
-        for pattern in patterns:
-            matches = re.finditer(pattern, text, re.IGNORECASE)
-            for match in matches:
+        # Pattern 1: "Entity (TYPE)" format - e.g., "Robin Lee (PER)", "iPhone (ORG)"
+        # Allow letters, numbers, spaces, hyphens, apostrophes, periods in entity names
+        type_paren_pattern = r"([A-Za-z][a-zA-Z0-9\s\-\'\.]+?)\s*\(([A-Z]{2,})\)"
+        for match in re.finditer(type_paren_pattern, text):
+            entity_text = match.group(1).strip()
+            entity_type = match.group(2).strip().upper()
+            # Normalize entity types
+            entity_type = self._normalize_entity_type(entity_type)
+            if entity_text and entity_type:
+                entities.add((entity_text, entity_type))
+
+        # Pattern 2: "TYPE: Entity" format - e.g., "PERSON: Robin Lee"
+        type_colon_patterns = [
+            r"(?:PERSON|PER):\s*([^,;\n]+)",
+            r"(?:ORGANIZATION|ORG):\s*([^,;\n]+)",
+            r"(?:LOCATION|LOC):\s*([^,;\n]+)",
+            r"(?:FINANCIAL|FIN):\s*([^,;\n]+)",
+        ]
+        for pattern in type_colon_patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
                 entity_text = match.group(1).strip()
                 entity_type = match.group(0).split(":")[0].strip().upper()
-                entities.add((entity_text, entity_type))
+                entity_type = self._normalize_entity_type(entity_type)
+                if entity_text and entity_type:
+                    entities.add((entity_text, entity_type))
+
+        # Pattern 3: Simple comma-separated list after "Named entities:" or similar
+        # Only use if no structured entities found
+        if not entities:
+            list_pattern = r"(?:named\s+entit(?:y|ies)|entit(?:y|ies))[:\s]+([^.]+)"
+            match = re.search(list_pattern, text, re.IGNORECASE)
+            if match:
+                entity_list = match.group(1)
+                # Split by comma and extract individual entities
+                for part in re.split(r"[,;]", entity_list):
+                    part = part.strip()
+                    # Check if it has a type annotation like "(PER)"
+                    type_match = re.match(r"([A-Za-z][a-zA-Z0-9\s\-\'\.]*?)\s*\(([A-Z]+)\)", part)
+                    if type_match:
+                        entity_text = type_match.group(1).strip()
+                        entity_type = self._normalize_entity_type(type_match.group(2))
+                        if entity_text:
+                            entities.add((entity_text, entity_type))
+                    elif part and not re.match(r"^\s*(and|or|the)\s*$", part, re.IGNORECASE):
+                        # Entity without type - mark as UNKNOWN
+                        entities.add((part, "UNKNOWN"))
 
         return entities
 
+    def _normalize_entity_type(self, entity_type: str) -> str:
+        """Normalize entity type to standard form."""
+        if not entity_type:
+            return "UNKNOWN"
+        entity_type = str(entity_type).upper().strip()
+        if not entity_type:
+            return "UNKNOWN"
+        type_map = {
+            "PERSON": "PER",
+            "PEOPLE": "PER",
+            "ORGANIZATION": "ORG",
+            "ORGANISATIONS": "ORG",
+            "COMPANY": "ORG",
+            "LOCATION": "LOC",
+            "PLACE": "LOC",
+            "GPE": "LOC",
+            "FINANCIAL": "FIN",
+            "MONEY": "FIN",
+        }
+        return type_map.get(entity_type, entity_type)
+
     def _extract_gold_entities(self, sample: Sample) -> Set[tuple]:
-        """Extract gold entities from sample metadata."""
+        """Extract gold entities from sample ground_truth or metadata."""
         entities = set()
 
-        # Check if entities are already extracted by processor
+        # First, try to parse from ground_truth text (most common case)
+        if hasattr(sample, "ground_truth") and sample.ground_truth:
+            ground_truth = sample.ground_truth
+
+            # Check for "no entities" ground truth
+            no_entity_patterns = [
+                r"no\s+named\s+entit",
+                r"no\s+entit",
+                r"none\s+found",
+            ]
+            for pattern in no_entity_patterns:
+                if re.search(pattern, ground_truth, re.IGNORECASE):
+                    return entities  # Return empty set
+
+            # Parse "Entity (TYPE)" format - e.g., "Robin Lee (PER); London Overground (LOC)"
+            # Allow letters, numbers, spaces, hyphens, apostrophes, periods in entity names
+            type_paren_pattern = r"([A-Za-z][a-zA-Z0-9\s\-\'\.]+?)\s*\(([A-Z]{2,})\)"
+            for match in re.finditer(type_paren_pattern, ground_truth):
+                entity_text = match.group(1).strip()
+                entity_type = self._normalize_entity_type(match.group(2).strip())
+                if entity_text and entity_type:
+                    entities.add((entity_text, entity_type))
+
+            if entities:
+                return entities
+
+        # Fallback: Check if entities are in sample metadata
         if hasattr(sample, "metadata") and sample.metadata:
             extracted_entities = sample.metadata.get("entities", [])
 
             if extracted_entities:
-                # Use pre-extracted entities from processor
+                # Use pre-extracted entities from processor (normalize types for consistency)
                 for entity in extracted_entities:
-                    entities.add((entity["text"], entity["label"]))
+                    normalized_type = self._normalize_entity_type(entity["label"])
+                    entities.add((entity["text"], normalized_type))
                 return entities
 
             # Fallback: parse from BIO labels if available
@@ -152,21 +247,26 @@ class FiNEREnvironment(BenchmarkEnvironment):
 
                 for token, label in zip(tokens, bio_labels):
                     if label.startswith("B-"):  # Beginning of entity
-                        if current_entity:
-                            entities.add((" ".join(current_entity), current_label))
+                        if current_entity and current_label:
+                            # Normalize type before adding
+                            normalized_label = self._normalize_entity_type(current_label)
+                            entities.add((" ".join(current_entity), normalized_label))
                         current_entity = [token]
                         current_label = label[2:]  # Remove B- prefix
                     elif label.startswith("I-") and current_label:  # Inside entity
                         current_entity.append(token)
                     else:  # O or end of entity
-                        if current_entity:
-                            entities.add((" ".join(current_entity), current_label))
+                        if current_entity and current_label:
+                            # Normalize type before adding
+                            normalized_label = self._normalize_entity_type(current_label)
+                            entities.add((" ".join(current_entity), normalized_label))
                         current_entity = []
                         current_label = None
 
                 # Handle last entity
-                if current_entity:
-                    entities.add((" ".join(current_entity), current_label))
+                if current_entity and current_label:
+                    normalized_label = self._normalize_entity_type(current_label)
+                    entities.add((" ".join(current_entity), normalized_label))
 
         return entities
 
@@ -174,16 +274,59 @@ class FiNEREnvironment(BenchmarkEnvironment):
         self, predicted: Set[tuple], gold: Set[tuple]
     ) -> Dict[str, float]:
         """Compute NER evaluation metrics."""
-        if not gold:
+        # Handle edge cases
+        if not gold and not predicted:
+            # Both empty - perfect match (no entities to find, none found)
             return {
-                "precision": 1.0 if not predicted else 0.0,
+                "precision": 1.0,
                 "recall": 1.0,
                 "f1": 1.0,
+                "exact_match": 1.0,
+                "text_precision": 1.0,
+                "text_recall": 1.0,
+            }
+        elif not gold and predicted:
+            # Gold empty but predicted entities - all false positives
+            return {
+                "precision": 0.0,
+                "recall": 1.0,  # Vacuously true - all 0 gold entities were "found"
+                "f1": 0.0,  # F1 should be 0 when precision is 0
+                "exact_match": 0.0,
+                "text_precision": 0.0,
+                "text_recall": 1.0,
+            }
+        elif gold and not predicted:
+            # Gold has entities but none predicted - all false negatives
+            return {
+                "precision": 1.0,  # Vacuously true - all 0 predictions were correct
+                "recall": 0.0,
+                "f1": 0.0,  # F1 should be 0 when recall is 0
+                "exact_match": 0.0,
+                "text_precision": 1.0,
+                "text_recall": 0.0,
             }
 
-        true_positives = len(predicted & gold)
-        predicted_count = len(predicted)
-        gold_count = len(gold)
+        # Normal case: both have entities
+        # Normalize entities for comparison (case-insensitive, whitespace normalized)
+        def normalize_entity(entity_tuple):
+            text, etype = entity_tuple
+            # Normalize text: lowercase, collapse whitespace (handle None)
+            norm_text = " ".join(str(text).lower().split()) if text else ""
+            # Normalize type
+            norm_type = str(etype).upper() if etype else "UNKNOWN"
+            return (norm_text, norm_type)
+
+        normalized_predicted = {normalize_entity(e) for e in predicted}
+        normalized_gold = {normalize_entity(e) for e in gold}
+
+        # Also compute partial match (text only, ignoring type)
+        predicted_texts = {normalize_entity(e)[0] for e in predicted}
+        gold_texts = {normalize_entity(e)[0] for e in gold}
+
+        # Exact match (including type)
+        true_positives = len(normalized_predicted & normalized_gold)
+        predicted_count = len(normalized_predicted)
+        gold_count = len(normalized_gold)
 
         precision = true_positives / predicted_count if predicted_count > 0 else 0.0
         recall = true_positives / gold_count if gold_count > 0 else 0.0
@@ -193,11 +336,18 @@ class FiNEREnvironment(BenchmarkEnvironment):
             else 0.0
         )
 
+        # Text-only match (for debugging/analysis)
+        text_true_positives = len(predicted_texts & gold_texts)
+        text_precision = text_true_positives / len(predicted_texts) if predicted_texts else 0.0
+        text_recall = text_true_positives / len(gold_texts) if gold_texts else 0.0
+
         return {
             "precision": precision,
             "recall": recall,
             "f1": f1,
-            "exact_match": float(predicted == gold),
+            "exact_match": float(normalized_predicted == normalized_gold),
+            "text_precision": text_precision,  # Ignoring entity types
+            "text_recall": text_recall,
         }
 
     def _generate_ner_feedback(
@@ -229,9 +379,19 @@ class FiNEREnvironment(BenchmarkEnvironment):
                 "Focus on improving recall - ensure all relevant entities are identified."
             )
 
-        # Identify missed and incorrect entities
-        missed = gold - predicted
-        incorrect = predicted - gold
+        # Normalize entities for comparison (same as in metrics calculation)
+        def normalize_entity(entity_tuple):
+            text, etype = entity_tuple
+            norm_text = " ".join(str(text).lower().split()) if text else ""
+            norm_type = str(etype).upper() if etype else "UNKNOWN"
+            return (norm_text, norm_type)
+
+        normalized_predicted = {normalize_entity(e) for e in predicted}
+        normalized_gold = {normalize_entity(e) for e in gold}
+
+        # Identify missed and incorrect entities using normalized comparison
+        missed = normalized_gold - normalized_predicted
+        incorrect = normalized_predicted - normalized_gold
 
         if missed:
             feedback_parts.append(

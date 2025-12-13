@@ -6,7 +6,7 @@ data:
   dataset_path: openai/gsm8k
   subset: main
   split: test
-  limit: 200
+  # No default limit - use --limit CLI arg for testing, omit for full evaluation
 
 preprocessing:
   question_template: |

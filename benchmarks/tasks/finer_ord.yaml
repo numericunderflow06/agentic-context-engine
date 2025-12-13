@@ -4,7 +4,7 @@ data:
   source: huggingface
   dataset_path: gtfintechlab/finer-ord
   split: test
-  limit: 100  # Optional: limit for testing
+  # No default limit - use --limit CLI arg for testing, omit for full evaluation
 preprocessing:
   question_template: "Extract named entities from the following financial text:\n\n{text}\n\nIdentify and classify all entities (PERSON, ORGANIZATION, LOCATION, FINANCIAL terms)."
   ground_truth_field: entities
