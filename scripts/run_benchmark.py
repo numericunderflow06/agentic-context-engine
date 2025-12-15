@@ -624,12 +624,24 @@ def run_evaluation(
             # Evaluate
             env_result = environment.evaluate(sample, output)
 
+            # Build the prompt for logging (same as Agent._generate_impl)
+            prompt_used = agent.prompt_template.format(
+                skillbook=skillbook.as_prompt() or "(empty skillbook)",
+                reflection="(none)",
+                question=sample.question,
+                context=sample.context or "(none)",
+            )
+
             results.append(
                 {
                     "sample_id": f"{args.benchmark}_{i:04d}",
                     "question": sample.question,
+                    "context": sample.context or "",
+                    "prompt": prompt_used,
+                    "reasoning": output.reasoning,
                     "prediction": output.final_answer,
                     "ground_truth": sample.ground_truth,
+                    "skill_ids_cited": output.skill_ids,
                     "metrics": env_result.metrics,
                     "feedback": env_result.feedback,
                     "split": "baseline",
@@ -674,12 +686,24 @@ def run_evaluation(
 
             # Convert to results format
             for step_idx, step in enumerate(adaptation_results):
+                # Build the prompt for logging
+                prompt_used = agent.prompt_template.format(
+                    skillbook=adapter.skillbook.as_prompt() or "(empty skillbook)",
+                    reflection="(none)",
+                    question=step.sample.question,
+                    context=step.sample.context or "(none)",
+                )
+
                 results.append(
                     {
                         "sample_id": f"{args.benchmark}_{step_idx:04d}",
                         "question": step.sample.question,
+                        "context": step.sample.context or "",
+                        "prompt": prompt_used,
+                        "reasoning": step.agent_output.reasoning,
                         "prediction": step.agent_output.final_answer,
                         "ground_truth": step.sample.ground_truth,
+                        "skill_ids_cited": step.agent_output.skill_ids,
                         "metrics": step.environment_result.metrics,
                         "feedback": step.environment_result.feedback,
                         "split": "online",
@@ -721,12 +745,24 @@ def run_evaluation(
 
                 # Store training results
                 for step_idx, step in enumerate(adaptation_results):
+                    # Build the prompt for logging
+                    prompt_used = agent.prompt_template.format(
+                        skillbook=adapter.skillbook.as_prompt() or "(empty skillbook)",
+                        reflection="(none)",
+                        question=step.sample.question,
+                        context=step.sample.context or "(none)",
+                    )
+
                     train_results.append(
                         {
                             "sample_id": f"{args.benchmark}_train_{step_idx:04d}",
                             "question": step.sample.question,
+                            "context": step.sample.context or "",
+                            "prompt": prompt_used,
+                            "reasoning": step.agent_output.reasoning,
                             "prediction": step.agent_output.final_answer,
                             "ground_truth": step.sample.ground_truth,
+                            "skill_ids_cited": step.agent_output.skill_ids,
                             "metrics": step.environment_result.metrics,
                             "feedback": step.environment_result.feedback,
                             "split": "train",
@@ -749,12 +785,24 @@ def run_evaluation(
                     # Evaluate
                     env_result = environment.evaluate(sample, output)
 
+                    # Build the prompt for logging
+                    prompt_used = agent.prompt_template.format(
+                        skillbook=adapter.skillbook.as_prompt() or "(empty skillbook)",
+                        reflection="(none)",
+                        question=sample.question,
+                        context=sample.context or "(none)",
+                    )
+
                     test_results.append(
                         {
                             "sample_id": f"{args.benchmark}_test_{i:04d}",
                             "question": sample.question,
+                            "context": sample.context or "",
+                            "prompt": prompt_used,
+                            "reasoning": output.reasoning,
                             "prediction": output.final_answer,
                             "ground_truth": sample.ground_truth,
+                            "skill_ids_cited": output.skill_ids,
                             "metrics": env_result.metrics,
                             "feedback": env_result.feedback,
                             "split": "test",
